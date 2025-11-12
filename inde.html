@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Electricity Bill Generator (HTML/JS)</title>
+  <style>
+    :root{--bg:#f7fafc;--card:#fff;--muted:#6b7280;--accent:#4f46e5;--danger:#dc2626}
+    *{box-sizing:border-box}
+    body{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; background:var(--bg); color:#111}
+    .container{max-width:1100px;margin:28px auto;padding:20px}
+    .card{background:var(--card);border-radius:12px;padding:18px;box-shadow:0 6px 18px rgba(15,23,42,0.06);}
+    h1{margin:0 0 6px;font-size:20px}
+    p.lead{margin:0 0 14px;color:var(--muted);font-size:13px}
+    .grid{display:grid;gap:16px}
+    @media(min-width:900px){.grid{grid-template-columns:1fr 420px}}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input[type=text], input[type=number], select{width:100%;padding:8px;border:1px solid #e6e9ef;border-radius:8px}
+    .row{display:flex;gap:10px}
+    .row .col{flex:1}
+    .btn{background:var(--accent);color:#fff;padding:8px 12px;border-radius:8px;border:0;cursor:pointer}
+    .btn.ghost{background:transparent;color:var(--accent);border:1px solid rgba(79,70,229,0.12)}
+    .muted{color:var(--muted);font-size:13px}
+    .tariff-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .tariff-row input{max-width:140px}
+    .small{font-size:12px}
+    .breakdown{margin-top:12px}
+    .break-item{display:flex;justify-content:space-between;padding:10px;border-radius:8px;border:1px solid #f1f5f9;margin-bottom:8px}
+    .total{display:flex;justify-content:space-between;padding:12px;border-radius:10px;background:#f8fafc;font-weight:600}
+    .recent-list{max-height:240px;overflow:auto;margin-top:8px}
+    .recent-item{display:flex;justify-content:space-between;padding:8px;border-radius:8px;border:1px solid #f1f5f9;margin-bottom:8px}
+    .text-danger{color:var(--danger)}
+    footer{margin-top:16px;text-align:center;color:var(--muted);font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Electricity Bill Generator</h1>
+      <p class="lead">Single-file HTML/CSS/JS frontend for your C++ MySQL billing app. Uses the same slab rules (₹5 / ₹7 / ₹10) + fixed charge ₹50 and 5% tax so results will match your C++ program.</p>
+
+      <div class="grid">
+        <!-- left: form + tariff -->
+        <div>
+          <div class="card" style="margin-bottom:12px">
+            <h3 style="margin:0 0 10px">Customer & Readings</h3>
+            <form id="calcForm">
+              <label for="name">Customer name</label>
+              <input id="name" type="text" placeholder="e.g. S. Chaithanya" />
+
+              <div class="row" style="margin-top:10px">
+                <div class="col">
+                  <label for="prev">Previous reading (kWh)</label>
+                  <input id="prev" type="number" min="0" step="1" />
+                </div>
+                <div class="col">
+                  <label for="curr">Current reading (kWh)</label>
+                  <input id="curr" type="number" min="0" step="1" />
+                </div>
+              </div>
+
+              <div id="err" class="muted" style="height:18px;margin-top:8px;color:var(--danger)"></div>
+
+              <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+                <button class="btn" type="submit">Calculate</button>
+                <button id="resetBtn" type="button" class="btn ghost">Reset</button>
+                <div style="margin-left:auto" id="backendStatus" class="muted">Checking backend...</div>
+              </div>
+            </form>
+          </div>
+
+          <div class="card">
+            <h3 style="margin:0 0 10px">Tariff Editor (multi-slab)</h3>
+            <p class="small muted">Default matches your C++ code: 0–100 @ ₹5, 101–300 @ ₹7, 301+ @ ₹10. You can edit slabs here if needed.</p>
+            <div id="tariffList" style="margin-top:10px"></div>
+            <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+              <button id="addSlab" class="btn ghost" style="padding:6px 10px">+ Add slab</button>
+              <button id="restoreDefault" class="btn ghost" style="padding:6px 10px">Restore default</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- right: results + recent customers -->
+        <div>
+          <div class="card">
+            <h3 style="margin:0 0 10px">Bill Summary</h3>
+            <div id="noResult" class="muted">No bill calculated yet. Enter readings and click Calculate.</div>
+
+            <div id="resultPanel" style="display:none">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <div class="muted small">Units</div>
+                <div id="unitsDisplay" style="font-size:28px;font-weight:700">0</div>
+              </div>
+
+              <div id="breakdown" class="breakdown"></div>
+
+              <div style="margin-top:8px;padding:10px;border-radius:8px;border:1px solid #f1f5f9;background:#fff">
+                <div style="display:flex;justify-content:space-between;padding:6px 0"><div>Base Amount</div><div id="baseAmount">₹0.00</div></div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0"><div>Fixed Charge</div><div id="fixedCharge">₹50.00</div></div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0"><div>Tax (5%)</div><div id="taxAmount">₹0.00</div></div>
+              </div>
+
+              <div class="total" style="margin-top:8px">
+                <div>Total</div>
+                <div id="totalDisplay">₹0.00</div>
+              </div>
+
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <button id="saveBtn" class="btn ghost">Save (backend)</button>
+                <button id="csvBtn" class="btn ghost">Export CSV</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:12px">
+            <h3 style="margin:0 0 10px">Recent Customers / Usage</h3>
+            <div id="recent" class="recent-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <footer>Frontend matches the C++ billing logic. If you run a Node API, keep endpoints under <code>/api/*</code> or update fetch URLs accordingly.</footer>
+    </div>
+  </div>
+
+  <script>
+    // Default tariff matching the C++ program
+    const DEFAULT_TARIFF = [ { upTo:100, rate:5.0 }, { upTo:300, rate:7.0 }, { upTo:Infinity, rate:10.0 } ];
+
+    // State
+    let tariff = JSON.parse(JSON.stringify(DEFAULT_TARIFF));
+    let apiAvailable = false;
+    let lastResult = null;
+
+    // Helpers
+    const q = (s) => document.querySelector(s);
+    const formatCurrency = (x) => '₹' + Number(x).toFixed(2);
+
+    function renderTariff(){
+      const list = q('#tariffList'); list.innerHTML = '';
+      tariff.forEach((t,i)=>{
+        const row = document.createElement('div'); row.className='tariff-row';
+        const inputUp = document.createElement('input'); inputUp.type='text'; inputUp.value = t.upTo === Infinity ? 'Infinity' : t.upTo; inputUp.title='Up to (cumulative units)';
+        const inputRate = document.createElement('input'); inputRate.type='number'; inputRate.step='0.01'; inputRate.value = t.rate; inputRate.title='Rate per unit';
+        const remove = document.createElement('button'); remove.className='btn ghost'; remove.textContent='Remove'; remove.style.padding='6px 8px';
+        inputUp.addEventListener('change', ()=>{
+          const val = inputUp.value.trim(); tariff[i].upTo = (val.toLowerCase()==='infinity')? Infinity : Number(val);
+        });
+        inputRate.addEventListener('change', ()=>{ tariff[i].rate = Number(inputRate.value); });
+        remove.addEventListener('click', ()=>{ tariff.splice(i,1); renderTariff(); });
+        row.appendChild(inputUp); row.appendChild(inputRate); row.appendChild(remove);
+        list.appendChild(row);
+      });
+    }
+
+    // Local calculation that mirrors the C++ calculateBill + fixed charge + tax
+    function calculateBillLocal(units, slabs){
+      // compute base amount using slabs like C++: 0-100 @5, 101-300 @7, 301+ @10
+      let remaining = units; let lastUpper = 0; const breakdown = [];
+      for(const slab of slabs){
+        const upper = (slab.upTo===Infinity)? Infinity : Number(slab.upTo);
+        const slabUnits = upper===Infinity ? remaining : Math.max(0, Math.min(remaining, upper - lastUpper));
+        if(slabUnits <= 0){ lastUpper = upper; continue; }
+        const amount = slabUnits * slab.rate;
+        breakdown.push({ units: slabUnits, rate: slab.rate, amount });
+        remaining -= slabUnits; lastUpper = upper; if(remaining<=0) break;
+      }
+      const baseAmount = breakdown.reduce((s,b)=> s + b.amount, 0);
+      const fixedCharge = 50.0;
+      const tax = baseAmount * 0.05; // 5%
+      const total = baseAmount + fixedCharge + tax;
+      return { breakdown, baseAmount, fixedCharge, tax, total };
+    }
+
+    function renderResult(res){
+      lastResult = res;
+      q('#noResult').style.display='none'; q('#resultPanel').style.display='block';
+      q('#unitsDisplay').textContent = res.units;
+      const br = q('#breakdown'); br.innerHTML='';
+      res.breakdown.forEach(b=>{
+        const el = document.createElement('div'); el.className='break-item';
+        el.innerHTML = `<div><div style="font-weight:600">${b.units} kWh @ ${b.rate} /kWh</div><div class="small muted">${b.units} × ${b.rate}</div></div><div style="font-weight:600">${formatCurrency(b.amount)}</div>`;
+        br.appendChild(el);
+      });
+      q('#baseAmount').textContent = formatCurrency(res.baseAmount);
+      q('#fixedCharge').textContent = formatCurrency(res.fixedCharge);
+      q('#taxAmount').textContent = formatCurrency(res.tax);
+      q('#totalDisplay').textContent = formatCurrency(res.total);
+    }
+
+    async function checkBackend(){
+      try{
+        const r = await fetch('/api/ping'); // optional lightweight endpoint
+        apiAvailable = r.ok;
+      }catch(e){ apiAvailable = false; }
+      q('#backendStatus').textContent = apiAvailable ? 'Backend: Available' : 'Backend: Unavailable (local fallback)';
+    }
+
+    async function loadRecent(){
+      const recentEl = q('#recent'); recentEl.innerHTML = '<div class="muted">Loading...</div>';
+      try{
+        const res = await fetch('/api/customers');
+        if(!res.ok) throw new Error('no backend');
+        const data = await res.json();
+        recentEl.innerHTML='';
+        if(!data || data.length===0){ recentEl.innerHTML = '<div class="muted">No recent customers</div>'; return; }
+        data.forEach(c=>{
+          const div = document.createElement('div'); div.className='recent-item';
+          // adapt to typical rows: meter_no, name, month, units (from usage)
+          div.innerHTML = `<div><div style="font-weight:600">${c.name||c.meter_no||'Anonymous'}</div><div class="small muted">${c.month? c.month : ''} ${c.units? '• '+c.units+' kWh' : ''}</div></div><div style="font-weight:600">${c.units? formatCurrency(c.units * (c.units<=100?5:c.units<=300?7:10)) : ''}</div>`;
+          recentEl.appendChild(div);
+        });
+      }catch(e){ recentEl.innerHTML = '<div class="muted">No recent customers (backend unavailable)</div>'; }
+    }
+
+    // Wire up UI
+    document.addEventListener('DOMContentLoaded', ()=>{
+      renderTariff(); checkBackend().then(loadRecent);
+
+      q('#addSlab').addEventListener('click', ()=>{ tariff.push({ upTo: Infinity, rate:0 }); renderTariff(); });
+      q('#restoreDefault').addEventListener('click', ()=>{ tariff = JSON.parse(JSON.stringify(DEFAULT_TARIFF)); renderTariff(); });
+
+      q('#resetBtn').addEventListener('click', ()=>{
+        q('#name').value=''; q('#prev').value=''; q('#curr').value=''; q('#err').textContent=''; q('#noResult').style.display='block'; q('#resultPanel').style.display='none'; lastResult=null;
+      });
+
+      q('#calcForm').addEventListener('submit', async (ev)=>{
+        ev.preventDefault(); q('#err').textContent='';
+        const prev = Number(q('#prev').value); const curr = Number(q('#curr').value);
+        if(Number.isNaN(prev) || Number.isNaN(curr) || curr < prev){ q('#err').textContent='Please provide valid readings (current >= previous)'; return; }
+        const units = curr - prev;
+        const payload = { customer:{ name: q('#name').value || 'Anonymous' }, prevReading: prev, currReading: curr, units, tariff };
+
+        // Try backend calculation (optional)
+        if(apiAvailable){
+          try{
+            const r = await fetch('/api/calculate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            if(!r.ok) throw new Error('backend error');
+            const data = await r.json();
+            // normalize response if backend returns baseAmount/fixedCharge/tax/total
+            if(data.total || data.baseAmount){
+              const breakdown = data.billBreakdown || data.breakdown || [];
+              const baseAmount = data.baseAmount ?? (breakdown.reduce? breakdown.reduce((s,b)=>s+(b.amount||0),0) : 0);
+              const fixedCharge = data.fixedCharge ?? 50.0;
+              const tax = data.tax ?? (baseAmount * 0.05);
+              const total = data.total ?? (baseAmount + fixedCharge + tax);
+              renderResult({ breakdown, baseAmount, fixedCharge, tax, total, units });
+            } else {
+              // fallback shape
+              const local = calculateBillLocal(units, tariff);
+              renderResult({ breakdown: local.breakdown, baseAmount: local.baseAmount, fixedCharge: local.fixedCharge, tax: local.tax, total: local.total, units });
+            }
+            return;
+          }catch(e){ apiAvailable = false; q('#backendStatus').textContent = 'Backend: Unavailable (local fallback)'; }
+        }
+
+        // Local fallback
+        const local = calculateBillLocal(units, tariff);
+        renderResult({ breakdown: local.breakdown, baseAmount: local.baseAmount, fixedCharge: local.fixedCharge, tax: local.tax, total: local.total, units });
+      });
+
+      q('#csvBtn').addEventListener('click', ()=>{
+        if(!lastResult){ alert('No result to export'); return; }
+        const rows = [ ['Name','Prev','Curr','Units','BaseAmount','FixedCharge','Tax','Total'], [q('#name').value || '', q('#prev').value, q('#curr').value, lastResult.units, lastResult.baseAmount, lastResult.fixedCharge, lastResult.tax, lastResult.total] ];
+        const csv = rows.map(r=> r.map(v=> '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+        const blob = new Blob([csv], { type:'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download='bill.csv'; a.click(); URL.revokeObjectURL(url);
+      });
+
+      q('#saveBtn').addEventListener('click', async ()=>{
+        if(!lastResult){ alert('No result to save'); return; }
+        try{
+          const body = { meterNo: null, customer:{ name: q('#name').value || 'Anonymous' }, prevReading: Number(q('#prev').value), currReading: Number(q('#curr').value), units: lastResult.units, baseAmount: lastResult.baseAmount, fixedCharge: lastResult.fixedCharge, tax: lastResult.tax, bill: lastResult.total };
+          const r = await fetch('/api/saveBill', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          if(!r.ok) throw new Error('save failed');
+          alert('Saved to backend'); loadRecent();
+        }catch(e){ alert('Save failed — backend unavailable'); }
+      });
+    });
+  </script>
+</body>
+</html>
